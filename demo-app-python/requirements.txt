@@ -3,4 +3,4 @@ opentelemetry-api==1.30.0
 opentelemetry-sdk==1.30.0
 opentelemetry-exporter-otlp-proto-grpc==1.30.0
 opentelemetry-instrumentation-flask==0.51b0
-grpcio==1.68.1
+grpcio==1.81.1
