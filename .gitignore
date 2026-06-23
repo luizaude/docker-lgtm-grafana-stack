@@ -1,0 +1,38 @@
+# Environment variables
+.env
+
+# Data persisted locally by Docker volumes
+data/
+
+# Go artifacts
+demo-app-go/demo-app-go
+demo-app-go/*.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log

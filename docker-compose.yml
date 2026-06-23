@@ -1,0 +1,144 @@
+services:
+  # ============================================
+  # GRAFANA - Unified Observability UI
+  # ============================================
+  grafana:
+    image: grafana/grafana:12.4.0
+    container_name: grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_AUTH_ANONYMOUS_ENABLED=${GRAFANA_ANONYMOUS_ENABLED:-true}
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=${GRAFANA_ANONYMOUS_ROLE:-Admin}
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - loki
+      - mimir
+      - tempo
+    networks:
+      - observability
+
+  # ============================================
+  # GRAFANA LOKI - Log Aggregation
+  # ============================================
+  loki:
+    image: grafana/loki:3.7.0
+    container_name: loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./config/loki/loki-config.yaml:/etc/loki/local-config.yaml
+      - loki-data:/loki
+    networks:
+      - observability
+
+  # ============================================
+  # GRAFANA MIMIR - Metrics (TSDB)
+  # ============================================
+  mimir:
+    image: grafana/mimir:3.0.0
+    container_name: mimir
+    ports:
+      - "${MIMIR_PORT:-9009}:9009"
+    command:
+      - -config.file=/etc/mimir/mimir-config.yaml
+      - -target=all
+    volumes:
+      - ./config/mimir/mimir-config.yaml:/etc/mimir/mimir-config.yaml
+      - mimir-data:/data
+    networks:
+      - observability
+
+  # ============================================
+  # GRAFANA TEMPO - Distributed Tracing
+  # ============================================
+  tempo:
+    image: grafana/tempo:2.10.0
+    container_name: tempo
+    user: "0:0"
+    ports:
+      - "${TEMPO_PORT:-3200}:3200"   # tempo API
+      - "${TEMPO_OTLP_GRPC_PORT:-4317}:4317"   # otlp grpc
+      - "${TEMPO_OTLP_HTTP_PORT:-4318}:4318"   # otlp http
+    command: -config.file=/etc/tempo/tempo-config.yaml
+    volumes:
+      - ./config/tempo/tempo-config.yaml:/etc/tempo/tempo-config.yaml
+      - tempo-data:/var/tempo
+    networks:
+      - observability
+
+  # ============================================
+  # GRAFANA ALLOY - Observability Collector
+  # ============================================
+  alloy:
+    image: grafana/alloy:v1.16.0
+    container_name: alloy
+    restart: unless-stopped
+    ports:
+      - "${ALLOY_UI_PORT:-12345}:12345" # Alloy UI port
+    volumes:
+      - ./config/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Collect logs/metrics from other Docker containers
+    command: [
+      "run",
+      "--server.http.listen-addr=0.0.0.0:12345",
+      "--storage.path=/var/lib/alloy/data",
+      "/etc/alloy/config.alloy"
+    ]
+    networks:
+      - observability
+    depends_on:
+      - tempo
+
+  # ============================================
+  # DEMO APP - Sample app (Flask + OpenTelemetry)
+  # ============================================
+  demo-app:
+    build:
+      context: ./demo-app-python
+      dockerfile: Dockerfile
+    container_name: demo-app
+    ports:
+      - "${DEMO_APP_PORT:-8080}:8080"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_GRPC_ENDPOINT:-alloy:4317}
+      - OTEL_SERVICE_NAME=demo-app
+    depends_on:
+      - alloy
+    networks:
+      - observability
+
+  # ============================================
+  # DEMO APP GO - Sample app (net/http + OpenTelemetry)
+  # ============================================
+  demo-app-go:
+    build:
+      context: ./demo-app-go
+      dockerfile: Dockerfile
+    container_name: demo-app-go
+    ports:
+      - "${DEMO_APP_GO_PORT:-8081}:8081"
+    environment:
+      - PORT=8081
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_GRPC_ENDPOINT:-alloy:4317}
+      - OTEL_SERVICE_NAME=demo-app-go
+    depends_on:
+      - alloy
+    networks:
+      - observability
+
+networks:
+  observability:
+    driver: bridge
+
+volumes:
+  grafana-data:
+  loki-data:
+  mimir-data:
+  tempo-data:
